@@ -9,6 +9,10 @@ import (
 )
 
 func newStreamBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPubsubBeacon, error) {
+	if err := validateCommonConfig(cfg); err != nil {
+		return nil, err
+	}
+
 	pubsubClient, err := pubsub.NewClient(ctx, cfg.ProjectID)
 	if err != nil {
 		return nil, err

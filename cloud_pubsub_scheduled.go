@@ -3,6 +3,7 @@ package pharos
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -19,6 +20,10 @@ type scheduledSubscriber struct {
 }
 
 func newScheduledBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPubsubBeacon, error) {
+	if err := validateScheduledConfig(cfg); err != nil {
+		return nil, err
+	}
+
 	subClient, err := pubsubv1.NewSubscriberClient(ctx)
 	if err != nil {
 		return nil, err
@@ -36,6 +41,18 @@ func newScheduledBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*Clou
 		},
 		handlerMap: cfg.Handlers,
 	}, nil
+}
+
+func validateScheduledConfig(cfg CloudPubsubBeaconConfig) error {
+	if err := validateCommonConfig(cfg); err != nil {
+		return err
+	}
+
+	if cfg.MaxMessages < 1 {
+		return errors.New("max messages must be set to 1 or higher for scheduled beacon")
+	}
+
+	return nil
 }
 
 func (b *CloudPubsubBeacon) runScheduled(ctx context.Context, errCh chan error) error {

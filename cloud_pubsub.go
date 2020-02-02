@@ -2,6 +2,7 @@ package pharos
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"cloud.google.com/go/pubsub"
@@ -61,4 +62,20 @@ func (b *CloudPubsubBeacon) Receive(ctx context.Context) chan error {
 
 func (b *CloudPubsubBeacon) BeaconType() string {
 	return string(b.beaconType)
+}
+
+func validateCommonConfig(cfg CloudPubsubBeaconConfig) error {
+	if cfg.ProjectID == "" {
+		return errors.New("project ID cannot be blank")
+	}
+
+	if cfg.SubscriptionID == "" {
+		return errors.New("subscription ID cannot be blank")
+	}
+
+	if len(cfg.Handlers) < 1 {
+		return errors.New("must provide at least one event handler method")
+	}
+
+	return nil
 }
