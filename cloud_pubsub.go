@@ -1,4 +1,4 @@
-package pharos
+package beacon
 
 import (
 	"context"

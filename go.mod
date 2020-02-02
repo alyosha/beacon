@@ -1,4 +1,4 @@
-module github.com/alyosha/pharos
+module github.com/alyosha/beacon
 
 go 1.13
 
