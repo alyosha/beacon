@@ -8,7 +8,9 @@ import (
 	"cloud.google.com/go/pubsub"
 )
 
-func newStreamBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPubsubBeacon, error) {
+var errSubDoesNotExistPattern = "subscription with ID %s does not exist"
+
+func newStreamBeacon(ctx context.Context, cfg CloudPubsubConfig) (*CloudPubsubBeacon, error) {
 	if err := validateCommonConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -19,13 +21,14 @@ func newStreamBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPu
 	}
 
 	subscription := pubsubClient.Subscription(cfg.SubscriptionID)
+
 	ok, err := subscription.Exists(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	if !ok {
-		return nil, fmt.Errorf("subscription with ID %s does not exist", cfg.SubscriptionID)
+		return nil, fmt.Errorf(errSubDoesNotExistPattern, cfg.SubscriptionID)
 	}
 
 	subscription.ReceiveSettings = cfg.ReceiveSettings

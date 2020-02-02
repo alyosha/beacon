@@ -25,7 +25,7 @@ type CloudPubsubBeacon struct {
 	handlerMap   EventHandlers
 }
 
-type CloudPubsubBeaconConfig struct {
+type CloudPubsubConfig struct {
 	ProjectID       string
 	SubscriptionID  string
 	Handlers        EventHandlers
@@ -41,7 +41,7 @@ var (
 	errInvalidEventHandlers  = errors.New("must provide at least one event handler method")
 )
 
-func NewCloudPubsubBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPubsubBeacon, error) {
+func NewCloudPubsub(ctx context.Context, cfg CloudPubsubConfig) (*CloudPubsubBeacon, error) {
 	if cfg.PullInterval > 0 {
 		b, err := newScheduledBeacon(ctx, cfg)
 		if err != nil {
@@ -72,7 +72,7 @@ func (b *CloudPubsubBeacon) BeaconType() string {
 	return string(b.beaconType)
 }
 
-func validateCommonConfig(cfg CloudPubsubBeaconConfig) error {
+func validateCommonConfig(cfg CloudPubsubConfig) error {
 	if cfg.ProjectID == "" {
 		return errInvalidProjectID
 	}

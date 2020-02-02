@@ -21,7 +21,7 @@ type scheduledSubscriber struct {
 
 var errInvalidMaxMessages = errors.New("max messages must be set to 1 or higher for scheduled beacon")
 
-func newScheduledBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPubsubBeacon, error) {
+func newScheduledBeacon(ctx context.Context, cfg CloudPubsubConfig) (*CloudPubsubBeacon, error) {
 	if err := validateScheduledConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func newScheduledBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*Clou
 	}, nil
 }
 
-func validateScheduledConfig(cfg CloudPubsubBeaconConfig) error {
+func validateScheduledConfig(cfg CloudPubsubConfig) error {
 	if err := validateCommonConfig(cfg); err != nil {
 		return err
 	}
@@ -88,30 +88,7 @@ func (b *CloudPubsubBeacon) receive(ctx context.Context, errCh chan error) {
 		doneCh <- struct{}{}
 	}()
 
-	var wg sync.WaitGroup
-	for i, msg := range pullResp.ReceivedMessages {
-		wg.Add(1)
-		i, msg := i, msg
-		go func(i int, msg *pubsubpb.ReceivedMessage) {
-			defer wg.Done()
-			evt := BeaconEvent{}
-			if err := json.Unmarshal([]byte(msg.Message.Data), &evt); err != nil {
-				errCh <- fmt.Errorf("JSON unmarshal err: %w", err)
-				return
-			}
-			shouldAck, err := process(evt, b.handlerMap)
-			if err != nil {
-				errCh <- err
-			}
-			if shouldAck {
-				ackIDCh <- msg.AckId
-			}
-		}(i, msg)
-	}
-
-	wg.Wait()
-
-	close(ackIDCh)
+	b.processMessages(pullResp.ReceivedMessages, ackIDCh, errCh)
 
 	_ = <-doneCh
 
@@ -134,6 +111,34 @@ func (b *CloudPubsubBeacon) pullMessageChunks(ctx context.Context) (*pubsubpb.Pu
 	}
 
 	return resp, nil
+}
+
+func (b *CloudPubsubBeacon) processMessages(messages []*pubsubpb.ReceivedMessage, ackIDCh chan string, errCh chan error) {
+	var wg sync.WaitGroup
+
+	for i, msg := range messages {
+		wg.Add(1)
+		i, msg := i, msg
+		go func(i int, msg *pubsubpb.ReceivedMessage) {
+			defer wg.Done()
+			evt := BeaconEvent{}
+			if err := json.Unmarshal([]byte(msg.Message.Data), &evt); err != nil {
+				errCh <- fmt.Errorf("JSON unmarshal err: %w", err)
+				return
+			}
+			shouldAck, err := process(evt, b.handlerMap)
+			if err != nil {
+				errCh <- err
+			}
+			if shouldAck {
+				ackIDCh <- msg.AckId
+			}
+		}(i, msg)
+	}
+
+	wg.Wait()
+
+	close(ackIDCh)
 }
 
 func (b *CloudPubsubBeacon) ack(ctx context.Context, ackIDs []string) error {
