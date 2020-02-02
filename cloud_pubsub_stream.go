@@ -13,7 +13,7 @@ func newStreamBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPu
 		return nil, err
 	}
 
-	pubsubClient, err := pubsub.NewClient(ctx, cfg.ProjectID)
+	pubsubClient, err := pubsub.NewClient(ctx, cfg.ProjectID, cfg.Opts...)
 	if err != nil {
 		return nil, err
 	}

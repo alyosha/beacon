@@ -19,12 +19,14 @@ type scheduledSubscriber struct {
 	maxMessages      int32
 }
 
+var errInvalidMaxMessages = errors.New("max messages must be set to 1 or higher for scheduled beacon")
+
 func newScheduledBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPubsubBeacon, error) {
 	if err := validateScheduledConfig(cfg); err != nil {
 		return nil, err
 	}
 
-	subClient, err := pubsubv1.NewSubscriberClient(ctx)
+	subClient, err := pubsubv1.NewSubscriberClient(ctx, cfg.Opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +51,7 @@ func validateScheduledConfig(cfg CloudPubsubBeaconConfig) error {
 	}
 
 	if cfg.MaxMessages < 1 {
-		return errors.New("max messages must be set to 1 or higher for scheduled beacon")
+		return errInvalidMaxMessages
 	}
 
 	return nil
@@ -74,12 +76,16 @@ func (b *CloudPubsubBeacon) receive(ctx context.Context, errCh chan error) {
 		return
 	}
 
+	doneCh := make(chan struct{})
 	ackIDCh := make(chan string)
+
 	var ackIDs []string
+
 	go func() {
 		for ackID := range ackIDCh {
 			ackIDs = append(ackIDs, ackID)
 		}
+		doneCh <- struct{}{}
 	}()
 
 	var wg sync.WaitGroup
@@ -106,6 +112,8 @@ func (b *CloudPubsubBeacon) receive(ctx context.Context, errCh chan error) {
 	wg.Wait()
 
 	close(ackIDCh)
+
+	_ = <-doneCh
 
 	if len(ackIDs) > 0 {
 		if err := b.ack(ctx, ackIDs); err != nil {

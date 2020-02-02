@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub"
+	"google.golang.org/api/option"
 )
 
 const subPattern = "projects/%s/subscriptions/%s"
@@ -31,7 +32,14 @@ type CloudPubsubBeaconConfig struct {
 	PullInterval    time.Duration
 	MaxMessages     int32
 	ReceiveSettings pubsub.ReceiveSettings
+	Opts            []option.ClientOption
 }
+
+var (
+	errInvalidProjectID      = errors.New("project ID cannot be blank")
+	errInvalidSubscriptionID = errors.New("subscription ID cannot be blank")
+	errInvalidEventHandlers  = errors.New("must provide at least one event handler method")
+)
 
 func NewCloudPubsubBeacon(ctx context.Context, cfg CloudPubsubBeaconConfig) (*CloudPubsubBeacon, error) {
 	if cfg.PullInterval > 0 {
@@ -66,15 +74,15 @@ func (b *CloudPubsubBeacon) BeaconType() string {
 
 func validateCommonConfig(cfg CloudPubsubBeaconConfig) error {
 	if cfg.ProjectID == "" {
-		return errors.New("project ID cannot be blank")
+		return errInvalidProjectID
 	}
 
 	if cfg.SubscriptionID == "" {
-		return errors.New("subscription ID cannot be blank")
+		return errInvalidSubscriptionID
 	}
 
 	if len(cfg.Handlers) < 1 {
-		return errors.New("must provide at least one event handler method")
+		return errInvalidEventHandlers
 	}
 
 	return nil

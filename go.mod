@@ -7,5 +7,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
+	google.golang.org/api v0.14.0
 	google.golang.org/genproto v0.0.0-20200122232147-0452cf42e150
+	google.golang.org/grpc v1.21.1
 )
