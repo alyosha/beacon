@@ -13,7 +13,7 @@ type BeaconEvent struct {
 
 type EventHandlers map[interface{}]func([]byte) (bool, error)
 
-var ErrUnrecognizedEvent error = errors.New("pulled message of unrecognized event type")
+var ErrUnrecognizedEventType error = errors.New("pulled message of unrecognized event type")
 
 func PrepareBeaconEvent(event, eventType interface{}) ([]byte, error) {
 	payload, err := json.Marshal(&event)
@@ -34,11 +34,13 @@ func PrepareBeaconEvent(event, eventType interface{}) ([]byte, error) {
 	return marshalledEvt, nil
 }
 
-func process(evt BeaconEvent, handlerMap EventHandlers) (bool, error) {
+func process(evt BeaconEvent, handlerMap EventHandlers, ackUnrecognized bool) (bool, error) {
 	handler, ok := handlerMap[evt.EventType]
 	if !ok {
-		// TODO: make policy on unrecognized message acking configurable
-		return false, fmt.Errorf("%w: %s", ErrUnrecognizedEvent, fmt.Sprintf("%v", evt.EventType))
+		if evt.EventType == nil {
+			return ackUnrecognized, ErrUnrecognizedEventType
+		}
+		return ackUnrecognized, fmt.Errorf("%w: %s", ErrUnrecognizedEventType, fmt.Sprintf("%v", evt.EventType))
 	}
 
 	return handler([]byte(evt.EventPayload))

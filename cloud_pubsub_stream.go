@@ -2,63 +2,83 @@ package beacon
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+	"io"
 
-	"cloud.google.com/go/pubsub"
+	pubsubpb "google.golang.org/genproto/googleapis/pubsub/v1"
 )
 
-var errSubDoesNotExistPattern = "subscription with ID %s does not exist"
+func (b *CloudPubsubBeacon) runStream(ctx context.Context, errCh chan error) {
+	reqCh := make(chan *pubsubpb.StreamingPullRequest)
+	ackIDCh := make(chan string)
+	doneCh := make(chan struct{})
 
-func newStreamBeacon(ctx context.Context, cfg CloudPubsubConfig) (*CloudPubsubBeacon, error) {
-	if err := validateCommonConfig(cfg); err != nil {
-		return nil, err
-	}
+	go func() {
+		b.streamSend(reqCh, errCh)
+		doneCh <- struct{}{}
+	}()
 
-	pubsubClient, err := pubsub.NewClient(ctx, cfg.ProjectID, cfg.Opts...)
-	if err != nil {
-		return nil, err
-	}
+	go handleAcks(ackIDCh, reqCh)
 
-	subscription := pubsubClient.Subscription(cfg.SubscriptionID)
+	go func() {
+		for {
+			if b.contextCancelled {
+				break
+			}
+			b.streamReceive(ackIDCh, errCh)
+		}
+		close(ackIDCh)
+	}()
 
-	ok, err := subscription.Exists(ctx)
-	if err != nil {
-		return nil, err
-	}
+	reqCh <- b.pubsub.openStreamReq
 
-	if !ok {
-		return nil, fmt.Errorf(errSubDoesNotExistPattern, cfg.SubscriptionID)
-	}
+	_ = <-ctx.Done()
+	b.contextCancelled = true
 
-	subscription.ReceiveSettings = cfg.ReceiveSettings
+	_ = <-doneCh
+	close(errCh)
 
-	return &CloudPubsubBeacon{
-		beaconType: streamType,
-		streamSub:  subscription,
-		handlerMap: cfg.Handlers,
-	}, nil
+	return
 }
 
-func (b *CloudPubsubBeacon) runStream(ctx context.Context, errCh chan error) error {
-	err := b.streamSub.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
-		evt := BeaconEvent{}
-		if err := json.Unmarshal(msg.Data, &evt); err != nil {
-			errCh <- fmt.Errorf("JSON unmarshal err: %w", err)
-			return
-		}
-
-		shouldAck, err := process(evt, b.handlerMap)
-		if err != nil {
+func (b *CloudPubsubBeacon) streamSend(reqCh chan *pubsubpb.StreamingPullRequest, errCh chan error) {
+	for req := range reqCh {
+		if err := b.pubsub.stream.Send(req); err != nil {
 			errCh <- err
 		}
+	}
+	b.pubsub.stream.CloseSend()
+}
 
-		if shouldAck {
-			msg.Ack()
-		}
-
+func (b *CloudPubsubBeacon) streamReceive(ackIDCh chan string, errCh chan error) {
+	resp, err := b.pubsub.stream.Recv()
+	if err == io.EOF {
+		errCh <- err
 		return
-	})
+	}
 
-	return err
+	if err != nil {
+		errCh <- err
+		return
+	}
+
+	if resp == nil {
+		return
+	}
+
+	ackIDs, err := b.processMessages(resp.ReceivedMessages)
+	if err != nil {
+		errCh <- err
+		return
+	}
+
+	for _, ackID := range ackIDs {
+		ackIDCh <- ackID
+	}
+}
+
+func handleAcks(ackIDCh chan string, reqCh chan *pubsubpb.StreamingPullRequest) {
+	for ackID := range ackIDCh {
+		reqCh <- &pubsubpb.StreamingPullRequest{AckIds: []string{ackID}}
+	}
+	close(reqCh)
 }
