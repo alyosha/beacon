@@ -77,6 +77,7 @@ func main() {
 
 func _main() int {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	var env config
 	if err := envconfig.Process("", &env); err != nil {
@@ -133,6 +134,7 @@ func _main() int {
 		fmt.Printf("[ERR] beacon.NewCloudPubsub > %s\n", err)
 		return exitError
 	}
+	defer bcn.Close()
 
 	go publishEvents(ctx, env.ProjectID, env.TopicID)
 
@@ -162,9 +164,6 @@ func _main() int {
 	}
 
 	fmt.Printf("[INFO] cache entries: %v", c.Items())
-
-	bcn.Close()
-	cancel()
 
 	return exitOK
 }
