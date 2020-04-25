@@ -86,6 +86,10 @@ func (b *CloudPubsubBeacon) BeaconType() string {
 	return string(b.beaconType)
 }
 
+func (b *CloudPubsubBeacon) Close() {
+	b.pubsub.subscriber.Close()
+}
+
 func newCloudPubsubBeacon(ctx context.Context, cfg CloudPubsubConfig) (*CloudPubsubBeacon, error) {
 	if err := validate(cfg); err != nil {
 		return nil, err
@@ -110,6 +114,9 @@ func newCloudPubsubBeacon(ctx context.Context, cfg CloudPubsubConfig) (*CloudPub
 	}
 
 	if cfg.PullInterval > 0 {
+		if cfg.MaxMessages < 1 {
+			return nil, errInvalidMaxMessages
+		}
 		bcn.beaconType = scheduledType
 	} else {
 		bcn.beaconType = streamType
@@ -144,10 +151,6 @@ func validate(cfg CloudPubsubConfig) error {
 		return errInvalidEventHandlers
 	}
 
-	if cfg.MaxMessages < 1 {
-		return errInvalidMaxMessages
-	}
-
 	return nil
 }
 
@@ -170,16 +173,14 @@ func (b *CloudPubsubBeacon) processMessages(messages []*pubsubpb.ReceivedMessage
 		eg.Go(func() error {
 			evt := BeaconEvent{}
 			if err := json.Unmarshal([]byte(msg.Message.Data), &evt); err != nil {
+				ackIDCh <- msg.AckId
 				return fmt.Errorf("JSON unmarshal err: %w", err)
 			}
 			shouldAck, err := process(evt, b.handlerMap, b.pubsub.ackUnrecognized)
-			if err != nil {
-				return err
-			}
 			if shouldAck {
 				ackIDCh <- msg.AckId
 			}
-			return nil
+			return err
 		})
 	}
 

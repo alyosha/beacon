@@ -20,6 +20,10 @@ func (b *CloudPubsubBeacon) runScheduled(ctx context.Context, errCh chan error) 
 			close(errCh)
 			return
 		case <-time.After(b.pubsub.pullInterval):
+			// In the event that the time it takes to pull is greater than
+			// the configured pull interval, we don't want to launch a ton of
+			// simultaneous pulling goroutines, so we wait here
+			_ = <-doneCh
 		}
 	}
 }

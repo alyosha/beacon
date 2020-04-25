@@ -80,7 +80,7 @@ func _main() int {
 
 	var env config
 	if err := envconfig.Process("", &env); err != nil {
-		fmt.Printf("[ERR]: %s\n", err)
+		fmt.Printf("[ERR] envconfig.Proccess > %s\n", err)
 		return exitError
 	}
 
@@ -96,8 +96,6 @@ func _main() int {
 			return true, fatalErr
 		}
 		c.Set(evt.ID, evt, cache.DefaultExpiration)
-
-		fmt.Println(len(c.Items()))
 		return true, nil
 	}
 
@@ -111,7 +109,6 @@ func _main() int {
 			return true, errors.New("we don't like james")
 		}
 		c.Set(evt.ID, evt, cache.DefaultExpiration)
-		fmt.Println(len(c.Items()))
 		return true, nil
 	}
 
@@ -133,7 +130,7 @@ func _main() int {
 
 	bcn, err := beacon.NewCloudPubsub(ctx, cfg)
 	if err != nil {
-		fmt.Printf("[ERR]: %s\n", err)
+		fmt.Printf("[ERR] beacon.NewCloudPubsub > %s\n", err)
 		return exitError
 	}
 
@@ -147,7 +144,7 @@ func _main() int {
 
 	go func() {
 		for err := range errCh {
-			fmt.Printf("[ERR]: %s\n", err)
+			fmt.Printf("[ERR] %s\n", err)
 			if isFatal(err) {
 				doneCh <- struct{}{}
 			}
@@ -159,13 +156,15 @@ func _main() int {
 		fmt.Println("context cancelled")
 	case <-sigCh:
 		fmt.Printf("\nexiting\n")
-		cancel()
 	case <-doneCh:
 		fmt.Println("finished with fatal error")
 		return exitError
 	}
 
-	fmt.Printf("[INFO] final cache size: %d entries", len(c.Items()))
+	fmt.Printf("[INFO] cache entries: %v", c.Items())
+
+	bcn.Close()
+	cancel()
 
 	return exitOK
 }
@@ -182,6 +181,9 @@ func publishEvents(ctx context.Context, projectID, topicID string) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		client.Close()
+	}()
 
 	topic := client.Topic(topicID)
 
@@ -211,6 +213,8 @@ func publishEvents(ctx context.Context, projectID, topicID string) error {
 
 		beaconEvents = append(beaconEvents, paymentBeaconEvt, locBeaconEvt)
 	}
+
+	fmt.Println("publish events")
 
 	var wg sync.WaitGroup
 	for _, evt := range beaconEvents {
